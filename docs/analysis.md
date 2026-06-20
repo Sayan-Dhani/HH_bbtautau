@@ -25,57 +25,74 @@ Remember that:
 - to remove task output use `--remove-output N,a,y`, where N is depth for task dependencies. E.g. `--remove-output 0,a,y`.<br/> <br/>
 - it is highly recommended to limitate the maximum number of parallel jobs running adding `--parallel-jobs M` where M is the number of the parallel jobs (e.g. M=100)
 
-## Create anaCacheTuple
+## Analysis cache (heavy payload observables)
 
-For each Anatuple, an anaCacheTuple (storing observables which are computationally heavier) will be created.
-
-```sh
-law run AnaCacheTupleTask --period ${ERA} --version ${VERSION_NAME}
-```
-**Note**: at the `AnaCacheTupleTask` stage, the addition of customisation for specifying the version is still needed. For the other tasks, it won't be needed anymore.
-
-
-#### Merge data in anaCache tuples
+Computationally heavy per-event observables (e.g. the ggF DNN score) are not
+recomputed during histogramming. They are produced once per anaTuple by
+`AnalysisCacheTask` and stored as friend ("cache") trees. Each heavy producer is
+configured under the `payload_producers` key in `config/global.yaml`; the
+producer to run is selected with `--producer-to-run` (e.g. `ggF_DNN`):
 
 ```sh
-law run DataCacheMergeTask --period ${ERA} --version ${VERSION_NAME}
+law run AnalysisCacheTask --period ${ERA} --version ${VERSION_NAME} --producer-to-run ggF_DNN
 ```
+
+Per-process aggregation of the caches (needed by producers that require the whole
+process) is handled by `AnalysisCacheAggregationTask`, selected with
+`--producer-to-aggregate`:
+
+```sh
+law run AnalysisCacheAggregationTask --period ${ERA} --version ${VERSION_NAME} --producer-to-aggregate ggF_DNN
+```
+
+**Note:** You usually do not need to run these by hand. Any requested variable
+that is produced by a payload producer is resolved automatically, so the
+histogram tasks below pull in the required `AnalysisCacheTask` on demand. This
+replaces the old `AnaCacheTupleTask` / `DataCacheMergeTask` steps and the
+`need_cache` flag.
 
 
 ### Histograms Production
 
-This has to be run after AnaTupleTask but **not necessairly** after AnaCacheTupleTask, if the variable to plot is not stored inside AnaCacheTuples.
+This has to be run after `AnaTupleMergeTask`. The `AnalysisCacheTask` step above
+is only needed (and is then triggered automatically) if a variable to plot is
+produced by a payload producer.
 
-These task will produce histograms with observables that need to be specified inside the `Analysis/tasks.py` file or `user_custom.yaml` , specifically inside the `vars_to_plot` list.
+These tasks produce histograms with observables that need to be specified inside
+the `config/global.yaml` file or `user_custom.yaml`, specifically inside the
+`variables` list.
 
-The tasks to run are the following:
+The tasks to run are the following (each depends on the previous one):
 
-1. `HistProducerFileTask`: for each AnaTuple an histogram of the corresponding variable will be created.
+1. `HistTupleProducerTask`: for each merged anaTuple a flat "HistTuple" is created,
+   carrying all variables, weights, channels, regions and categories needed for
+   histogramming.
     ```sh
-    law run HistProducerFileTask --period $ERA --version ${VERSION_NAME}
+    law run HistTupleProducerTask --period $ERA --version ${VERSION_NAME}
     ```
-1. `HistProducerSampleTask`: all the histogram belonging to a specific sample will be merged in one histogram.
+1. `HistFromNtupleProducerTask`: for each HistTuple the per-file histograms of the
+   configured variables are filled (one per channel/region/category and
+   systematic variation).
     ```sh
-    law run HistProducerSampleTask --period $ERA --version ${VERSION_NAME}
+    law run HistFromNtupleProducerTask --period $ERA --version ${VERSION_NAME}
     ```
-1. `MergeTask`: all the histogram will be merged from samples to only one histograms under the folder `${HISTOGRAMS}/all_histograms/` to a specific sample will be merged in one histogram. At this stage, for each norm/shape uncertainty (+ central scenario) will be created one histogram.
+1. `HistMergerTask`: the per-file/per-sample histograms are merged into one
+   histogram per variable (for each norm/shape uncertainty + the central scenario).
     ```sh
-    law run MergeTask --period $ERA --version ${VERSION_NAME}
+    law run HistMergerTask --period $ERA --version ${VERSION_NAME}
     ```
-    Each histograms will be named as: `all_histograms_UNCERTAINTY.root` where uncertainty can be [Central, TauES_DM0, ecc....]
+1. `HistPlotTask`: produces the final plots for each variable and
+   channel/category/region.
+    ```sh
+    law run HistPlotTask --period $ERA --version ${VERSION_NAME}
+    ```
 
-1. `HaddMergedTask`: all the merged histograms (produced separately for each uncertainty) will be merged in only one file.
-    ```sh
-    law run HaddMergedTask --period $ERA --version ${VERSION_NAME}
-    ```
-    Tip: It's very fast so it can be convenient to run this task in local.
-    The final histogram will be named as: `all_histograms_Hadded.root`
-
-1. Plotting script: This step can be performed after `MergeTask`. Make sure to change the appropriate lines in this script to fit your work (e.g. directory path, variable names)
-    ```sh
-    cd Analysis
-    python3 make_stackplots.py
-    ```
+Alternatively, after `HistMergerTask`, you can produce stack plots with the
+helper script (edit the paths/variable names inside it first):
+```sh
+cd Analysis
+python3 make_stackplots.py
+```
 
 ## How to run HHbtag training skim ntuple production
 ```sh

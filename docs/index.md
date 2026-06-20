@@ -17,25 +17,36 @@ Task workflow managed is done via [LAW](https://github.com/riga/law) (Luigi Anal
     ```yaml
     fs_default:
         - 'T3_CH_CERNBOX:/store/user/USER_NAME/ANA_FOLDER/'
-    fs_anaCache:
-        - 'T3_CH_CERNBOX:/store/user/USER_NAME/ANA_FOLDER/'
     fs_anaTuple:
         - 'T3_CH_CERNBOX:/store/user/USER_NAME/ANA_FOLDER/'
     fs_anaCacheTuple:
         - 'T3_CH_CERNBOX:/store/user/USER_NAME/ANA_FOLDER/'
-    fs_histograms:
-        - 'T3_CH_CERNBOX:/store/user/USER_NAME/ANA_FOLDER/histograms/'
+    fs_HistTuple:
+        - 'T3_CH_CERNBOX:/store/user/USER_NAME/ANA_FOLDER/'
+    fs_plots:
+        - 'T3_CH_CERNBOX:/store/user/USER_NAME/ANA_FOLDER/plots/'
     fs_json:
         - 'T3_CH_CERNBOX:/store/user/USER_NAME/ANA_FOLDER/jsonFiles/'
     analysis_config_area: config
     compute_unc_variations: true
     compute_unc_histograms: true
     store_noncentral: true
-    vars_to_plot:
+    variables:
     - b1_pt
-    - { "name" : MT2, need_cache: true }
+    - bb_m_vis
     ```
-    Please note that the `need_cache` argument is needed if you need a variable from the `AnaCacheTupleTask` step (e.g. LegacyVariables)
+    Notes:
+
+    - Any `fs_*` location that you do not define falls back to `fs_default`, so
+      at minimum you only need `fs_default`. The locations actually used by the
+      current workflow are `fs_anaTuple`, `fs_anaCacheTuple`, `fs_HistTuple` and
+      `fs_plots` (the old `fs_anaCache` / `fs_histograms` keys are no longer
+      used).
+    - The variables to histogram are listed under the `variables` key. Variables
+      that are produced by a payload producer (configured under
+      `payload_producers` in `config/global.yaml`, e.g. the ggF DNN score) are
+      computed by `AnalysisCacheTask` and pulled in automatically when requested
+      — there is no longer a `need_cache` flag.
 
 ## How to load environment
 1. Following command activates the framework environment:
